@@ -46,6 +46,30 @@ jobs:
           touch dist/.nojekyll
           test -s dist/index.html
           grep -q 'Your reliable' dist/index.html
+      - name: Remove publishing-platform injections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def decode(value):
+              key = int(value[:2], 16)
+              return ''.join(chr(int(value[i:i + 2], 16) ^ key) for i in range(2, len(value), 2))
+
+          for path in Path('dist').glob('*.html'):
+              text = path.read_text(encoding='utf-8')
+              text = re.sub(r'<script\b[^>]*\bsrc="https://www\.kimi\.com/sdk-seed\.js"[^>]*>\s*</script>', '', text)
+              text = re.sub(r'<script\b[^>]*\bsrc="/cdn-cgi/scripts/[^"]*/email-decode\.min\.js"[^>]*>\s*</script>', '', text)
+              text = re.sub(r'<span\b(?=[^>]*class="__cf_email__")(?=[^>]*data-cfemail="([0-9a-fA-F]+)")[^>]*>.*?</span>', lambda m: decode(m.group(1)), text, flags=re.DOTALL)
+              text = re.sub(r'href="/cdn-cgi/l/email-protection#([0-9a-fA-F]+)"', lambda m: 'href="mailto:' + decode(m.group(1)) + '"', text)
+              for marker in ('sdk-seed.js', '/cdn-cgi/', '__cf_email__', 'data-cfemail='):
+                  if marker in text:
+                      raise RuntimeError(f'{path.name}: leftover {marker}')
+              if 'mailto:andyxusq888@gmail.com' not in text:
+                  raise RuntimeError(f'{path.name}: email link was not restored')
+              path.write_text(text, encoding='utf-8')
+          PY
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
