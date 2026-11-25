@@ -1,0 +1,64 @@
+name: Deploy MiracleTech to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare verified static build
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://miracletechparts.ok.kimi.link"
+          files=(
+            index.html products.html about.html how-to-order.html contact.html order.html
+            robots.txt sitemap.xml css/style.css js/main.js js/order.js
+            assets/favicon.svg assets/icons.svg
+            assets/fonts/ibm-plex-mono-medium.ttf
+            assets/fonts/manrope-bold.ttf
+            assets/fonts/manrope-extrabold.ttf
+            assets/fonts/manrope-regular.ttf
+            assets/fonts/manrope-semibold.ttf
+            assets/images/components.webp
+            assets/images/hero.webp
+            assets/images/products.webp
+            assets/images/quality.webp
+          )
+          mkdir -p dist
+          for file in "${files[@]}"; do
+            mkdir -p "dist/$(dirname "$file")"
+            curl --fail --silent --show-error --location --retry 3 --output "dist/$file" "$base/$file"
+          done
+          printf 'miracletechparts.shop\n' > dist/CNAME
+          touch dist/.nojekyll
+          test -s dist/index.html
+          grep -q 'Your reliable' dist/index.html
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
